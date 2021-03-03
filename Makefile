@@ -2,8 +2,8 @@
 
 # Before running STAGE needs to be exported for the shell ex: 'export STAGE=dev'
 
-FUNCTION=simple-serverless-routing
-DESCRIPTION="Simple serverless service to demonstrate routing"
+FUNCTION=dynamic-serverless-routing
+DESCRIPTION="Simple serverless service to demonstrate dynamic routing"
 REGION=us-east-2
 AWS_PAGER=
 S3_BUCKET="simple-serverless-$(STAGE)-lambda-artifacts-$(REGION)"
@@ -18,15 +18,12 @@ print-stage:
 	@echo
 
 
-build:
-	sam build
-
-build-cdk: clean
+build: clean
 	cp -R src dist
 	pip install --no-deps --platform manylinux1_x86_64 -r src/requirements.txt -t dist/
 
 # Example for deploying with CDK instead of SAM
-deploy-cdk: build-cdk
+deploy: build-cdk
 	cdk deploy --require-approval never
 
 
@@ -45,16 +42,6 @@ clean:
 	rm -rf tests/.pytest_cache
 	rm -rf src/__pycache__
 	rm -rf tests/integration/__pycache__
-
-
-deploy: print-stage build package
-	sam deploy \
-	--no-fail-on-empty-changeset \
-	--template-file "package.$(STAGE).yaml" \
-	--stack-name $(STACK_NAME) \
-	--capabilities CAPABILITY_IAM \
-	--region $(REGION) \
-	--parameter-overrides StageName=$(STAGE) ServiceName=$(FUNCTION)
 
 
 invoke:
