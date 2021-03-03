@@ -1,4 +1,5 @@
 from aws_lambda_powertools import Logger
+import logging
 from psycopg2.extras import RealDictCursor
 from utils import Invocation
 from utils import Router
@@ -10,6 +11,9 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from psycopg2 import _connect
 
 log: Logger = Logger()
+Logger("botocore").setLevel(logging.INFO)
+Logger("urllib3").setLevel(logging.INFO)
+
 router: Router = Router()
 conn: Optional[_connect] = None
 
