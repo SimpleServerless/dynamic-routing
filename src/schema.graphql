@@ -1,0 +1,72 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+
+  # Get a list of students
+  listStudents: [Student]
+
+  # Get a student by id
+  getStudent(studentId: Int!): Student
+
+}
+
+type Mutation {
+  # Update a Student
+  saveStudent(student: StudentInput!): Student
+
+}
+
+# A Student record
+type Student {
+  # UUID
+  studentUuid: ID!
+
+  # Student Id
+  studentId: Int!
+
+  # First name
+  firstName: String!
+
+  # Last name
+  lastName: String!
+
+  # Student status
+  status: Boolean!
+
+  # Enrolled program
+  programId: ID!
+
+  # Record is active
+  active: Boolean!
+
+}
+
+# A Student input
+input StudentInput {
+  # UUID
+  studentUuid: ID!
+
+  # Student Id
+  studentId: Int
+
+  # First name
+  firstName: String
+
+  # Last name
+  lastName: String
+
+  # Student status
+  status: Boolean
+
+  # Enrolled program
+  programId: ID
+
+  # Record is active
+  active: Boolean
+
+}
+
+
