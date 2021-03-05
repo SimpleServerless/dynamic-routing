@@ -1,2 +1,7 @@
 psycopg2-binary==2.8.6
 aws-lambda-powertools==1.10.5
+aws-xray-sdk==2.5.0
+fastjsonschema
+jsonpickle
+wrapt
+

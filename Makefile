@@ -20,12 +20,19 @@ print-stage:
 
 build: clean
 	cp -R src dist
+	# Lambda requires linux x86. This will make sure the dependencies target that instead of the local architecture.
 	pip install --no-deps --platform manylinux1_x86_64 -r src/requirements.txt -t dist/
 
 # Example for deploying with CDK instead of SAM
-deploy: build-cdk
+deploy: build
 	cdk deploy --require-approval never
 
+synth:
+	cdk synth
+
+# May need to be run one time if deploy gets the error "This stack uses assets, so the toolkit stack must be deployed"
+bootstrap:
+	cdk bootstrap aws://$(AWS_ACCOUNT)/$(REGION)
 
 package: build
 	@if test -z "$(STAGE)"; then echo "****** STAGE not set. Set STAGE with: export STAGE=env ******"; exit 1; fi
@@ -45,7 +52,7 @@ clean:
 
 
 invoke:
-	aws lambda invoke --invocation-type RequestResponse --function-name $(FUNCTION)-$(STAGE) --payload '{"fieldName": "listStudents", "args": {}}' --cli-binary-format raw-in-base64-out /dev/stdout
+	aws lambda invoke --invocation-type RequestResponse --function-name $(FUNCTION)-$(STAGE) --payload '{"route": "list_students", "args": {}}' --cli-binary-format raw-in-base64-out /dev/stdout
 
 
 # Run a custom event locally and see it's entire output. Good for iterating fast on your local machine.

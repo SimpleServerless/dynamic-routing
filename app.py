@@ -18,8 +18,7 @@ service_name = os.environ['FUNCTION']
 region = os.environ['AWS_DEFAULT_REGION']
 stack_name = f"{service_name}-{region}-{stage}"
 
-# CloudFormation and SAM is preferred especially if you are new to AWS, CloudFormation, CDK, or Serverless
-# This file represents an example of how to do most of what can be found in template.yaml wiht CDK
+
 class CdkStack(core.Stack):
 
     def __init__(self, scope: core.Construct, id: str, **kwargs) -> None:
@@ -35,19 +34,24 @@ class CdkStack(core.Stack):
         print(f"   Stack:   {stack_name}")
         print("")
 
-        datasource_name = to_camel(service_name) + "Lambda"
-
         ssm = boto3.client('ssm')
 
         # Environment variable mapping
-        environment: dict = {'dev': {'logLevel': 'DEBUG',
+        environment: dict = {'dev': {
+                                     'logLevel': 'DEBUG',
                                      'dbHost': 'simple-serverless-aurora-serverless-development.cluster-cw3bjgnjhzxa.us-east-2.rds.amazonaws.com',
-                                     'dbName': 'simple_serverless_service_dev',
-                                     'apiId': 'XXXXXXXX'
-                                     }
+                                     'dbName': 'simple_serverless_dev',
+                                     'vpcId': 'vpc-319daa58'
+                                     },
+                             'prod': {
+                                      'logLevel': 'INFO',
+                                      'dbHost': 'simple-serverless-aurora-serverless-production.cluster-cw3bjgnjhzxa.us-east-2.rds.amazonaws.com',
+                                      'dbName': 'simple_serverless_prod',
+                                      'vpcId': 'vpc-XXXXXX'
+                                      }
                              }
 
-        # Retrieve an existing VPC instance.
+        # How to: Retrieve an existing VPC instance.
         vpc = ec2.Vpc.from_lookup(self, 'VPC', vpc_id=environment[stage]['vpcId'])
 
         env_variables = {
@@ -58,13 +62,11 @@ class CdkStack(core.Stack):
             "LOG_LEVEL": environment[stage]['logLevel']
         }
 
+        # How to: Import a value exported from another stack
         app_security_group_id = core.Fn.import_value(f"simple-serverless-database-us-east-2-{stage}-AppSGId")
+
+        # How to: Import a security group
         app_security_group = ec2.SecurityGroup.from_security_group_id(self, "AppSecurityGroup", app_security_group_id)
-
-        # Layer for adding Insights extension
-        insights_layer = aws_lambda.LayerVersion.from_layer_version_arn(self, "InsightsLayer",
-                                                                        f"arn:aws:lambda:{self.region}:580247275435:layer:LambdaInsightsExtension:2")
-
 
         # Create the main lambda function
         service_lambda = aws_lambda.Function(self,
@@ -73,9 +75,9 @@ class CdkStack(core.Stack):
                                              description=service_name,
                                              code=aws_lambda.AssetCode("./dist"),
                                              function_name=service_name + "-" + stage,
-                                             timeout=core.Duration.seconds(45),
+                                             timeout=core.Duration.seconds(35),
                                              tracing=aws_lambda.Tracing.ACTIVE,
-                                             memory_size=256,
+                                             memory_size=128,
                                              handler='lambda_function.handler',
                                              vpc=vpc,
                                              security_groups=[app_security_group],
@@ -85,30 +87,49 @@ class CdkStack(core.Stack):
         service_lambda.add_to_role_policy(iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
             actions=["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue", "secretsmanager:List*"],
-            resources=[f"arn:aws:secretsmanager:{region}:{account}:secret:simple-serverless-service/*"]))
-
-        # Create a version and some Aliases used for promotion
-        lambda_version = service_lambda.add_version('LambdaVersion')
-        aws_lambda.Alias(self, 'LambdaAlias', alias_name='live', version=lambda_version)
-        aws_lambda.Alias(self, 'LambdaVerifiedAlias', alias_name='verified', version=lambda_version)
+            resources=[f"arn:aws:secretsmanager:{region}:{account}:secret:simple-serverless/*"]))
 
         # API endpoint configuration starts here
         policy = iam.PolicyStatement(actions=['lambda:InvokeFunction'],
-                                     resources=[service_lambda.function_arn + ":live"])
+                                     resources=[service_lambda.function_arn])
         principal = iam.ServicePrincipal('appsync.amazonaws.com')
         service_role = iam.Role(self, 'service-role', assumed_by=principal)
         service_role.add_to_policy(policy)
 
-        # Create an AppSync data source for GraphQL
-        lambda_data_source = appsync.CfnDataSource(
-            self, 'LambdaDataSource',
-            api_id='XXXXX',
-            name=datasource_name,
-            type='AWS_LAMBDA',
-            lambda_config=appsync.CfnDataSource.LambdaConfigProperty(
-                lambda_function_arn=service_lambda.function_arn + ":live"),
-            service_role_arn=service_role.role_arn
+        # How to: import an existing AppSync instance
+        # graphql_api = appsync.GraphqlApi.from_graphql_api_attributes(self, 'GraphQLApi', graphql_api_id='phw4kdabqnbjzi4czy3dtbmynu')
+
+        graphql_schema = appsync.Schema(file_path='./src/schema.graphql')
+        graphql_auth_mode = appsync.AuthorizationMode(authorization_type=appsync.AuthorizationType.API_KEY)
+        graphql_auth_config = appsync.AuthorizationConfig(default_authorization=graphql_auth_mode)
+
+        graphql_api = appsync.GraphqlApi(
+            self, 'GraphQLApi',
+            name='dynamic-graphql-api-' + stage,
+            authorization_config=graphql_auth_config,
+            schema=graphql_schema
         )
+
+        datasource_name = to_camel(service_name) + "Lambda"
+        lambda_data_source = appsync.LambdaDataSource(
+            self, 'LambdaDataSource',
+            api=graphql_api,
+            name=datasource_name,
+            lambda_function=service_lambda,
+            service_role=service_role
+        )
+
+        # How to: auto generate GraphQL resolvers from decorators ex: @router.graphql("Query", "listStudents").
+        for field_name, graphql_def in lambda_function.router.get_graphql_endpoints().items():
+            print(f"Creating graphql {graphql_def['parent']} for {field_name}")
+            appsync.Resolver(
+                self, field_name + "Resolver",
+                api=graphql_api,
+                type_name=graphql_def['parent'],
+                field_name=field_name,
+                data_source=lambda_data_source
+            )
+
 
         #
         # Example for how to create an API gateway integration point for ReST support
@@ -138,63 +159,32 @@ class CdkStack(core.Stack):
         #                          authorization_type='NONE',
         #                          target=f'integrations/{integration.ref}')
 
+        core.CfnOutput(self, "GraphQLApiIdOutput",
+                       value=graphql_api.api_id,
+                       export_name=f"{stack_name}-GraphqlApiId-{stage}")
 
-        # Do slick ass auto generation of GraphQL resolvers routes.
-        for field_name in lambda_function.router.get_graphql_endpoints().keys():
-            print("Creating graphql query for " + field_name)
-            graphql_def = lambda_function.router.get_graphql_endpoints()[field_name]
+        core.CfnOutput(self, "GraphQLUrlOutput",
+                       value=graphql_api.graphql_url,
+                       export_name=f"{stack_name}-GraphqlUrl-{stage}")
 
-            # Nested GraphQL queries likely have additional arguments that need
-            # to be passed, typically ids (i.e. student_id)
-            id_field = graphql_def.get('id_field', '')
-            id_field_put = ""
-            # Set id_field_put string to id_field(s) to append to request
-            # mapping template below
-            if id_field:
-                if type(id_field) == list:
-                    for field in id_field:
-                        id_field_put += f"$!{{args.put(\"{field}\", $context.source.{field})}}\n"
-                elif type(id_field) == str:
-                    id_field_put = f"$!{{args.put(\"{id_field}\", $context.source.{id_field})}}\n"
-
-            request_mapping_template = """
-                        #set( $args = {} )
-                        $!{args.putAll($context.args)}
-                        %s
-                        {
-                          "version": "2017-02-28",
-                          "operation": "Invoke",
-                          "payload": {
-                               "fieldName": "$context.info.fieldName",
-                               "args": $util.toJson($args)
-                            }
-                        }
-                    """ % id_field_put
-
-            resolver = appsync.CfnResolver(
-                self, field_name + "Resolver",
-                api_id=environment[stage]['apiId'],
-                type_name=graphql_def['parent'],
-                field_name=field_name,
-                data_source_name=lambda_data_source.name,
-                request_mapping_template=request_mapping_template,
-                response_mapping_template="$util.toJson($ctx.result)"
-            )
-
-            resolver.add_depends_on(lambda_data_source)
+        core.CfnOutput(self, "GraphQLApiKeyOutput",
+                       value=graphql_api.api_key,
+                       export_name=f"{stack_name}-GraphQLApiKey-{stage}")
 
 
-
-
+# Sometimes AWS lets you use '-' ex: service-name and sometimes you have to or want to use camel case ex: serviceName.
+# This saves me from having to create two sets of parameters
 def to_camel(name):
     components = name.split('-')
     # We capitalize the first letter of each component except the first one
     # with the 'title' method and join them together.
     return ''.join(x.title() for x in components)
 
+
+# Code to execute stack below
 app = core.App()
 
-# NOTE! ~/.aws/config will override the CDK_DEFAULT_ACCOUNT value no matter what you set it to in your environment
+# NOTE! ~/.aws/config will override the CDK_DEFAULT_ACCOUNT value no matter what you set it to in your environment variables
 account = os.environ['AWS_ACCOUNT']
 region = os.environ['AWS_DEFAULT_REGION']
 

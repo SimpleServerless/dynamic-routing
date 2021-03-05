@@ -32,15 +32,15 @@ events = {
 
     "LIST_STUDENTS_GRAPHQL":
         """
-        {
-            "arguments": {},
+                   "arguments": {},
                 "request": {
                   "headers": {
                     "content-type": "application/json",
                     "x-api-key": "xxx-xxxxxxxxxxx",
                     "accept": "*/*"
                   }
-                },
+                } {
+,
             "info": {
                 "selectionSetList": ["studentUuid", "studentId", "firstName", "lastName", "programId", "status"],
                 "selectionSetGraphQL": "{\\n  studentUuid\\n  studentId\\n  firstName\\n  lastName\\n  programId\\n  status\\n}",
