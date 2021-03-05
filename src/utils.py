@@ -31,10 +31,12 @@ class Router:
 
     # Can be used to resolve ReST calls.
     # Example: @router.route("GET" "/students")
-    def rest(self, method, field_name):
+    def rest(self, method, path):
 
         def decorator(function):
-            self._rest_endpoint[f"{method} {field_name}"] = {'function': function, 'method': method}
+            self._rest_endpoint[f"{method} {path}"] = {'function': function,
+                                                       'method': method,
+                                                       'path': path}
             return function
 
         return decorator

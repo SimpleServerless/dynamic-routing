@@ -6,6 +6,8 @@ import aws_cdk.aws_appsync as appsync
 import aws_cdk.aws_ec2 as ec2
 import aws_cdk.aws_lambda as aws_lambda
 import aws_cdk.aws_iam as iam
+import aws_cdk.aws_apigatewayv2 as apigatewayv2
+import aws_cdk.aws_apigatewayv2_integrations as apigatewayv2_integrations
 
 import boto3
 
@@ -89,7 +91,36 @@ class CdkStack(core.Stack):
             actions=["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue", "secretsmanager:List*"],
             resources=[f"arn:aws:secretsmanager:{region}:{account}:secret:simple-serverless/*"]))
 
-        # API endpoint configuration starts here
+        #
+        # REST (API Gateway HTTP) stuff starts here
+        #
+
+        # How to: Import an existing HTTP API Gateway instance
+        # http_api = apigatewayv2.HttpApi.from_api_id(self, id='APIGateway', http_api_id='0fdl9wlxw4')
+
+        # How to: Create a new HTTP API Gateway instance
+        http_api = apigatewayv2.HttpApi(
+            self, 'APIGateway',
+            api_name=f'dynamic-rest-api-{stage}'
+        )
+
+        integration = apigatewayv2_integrations.LambdaProxyIntegration(
+            handler=service_lambda,
+            payload_format_version=apigatewayv2.PayloadFormatVersion.VERSION_2_0
+        )
+
+        # How to: auto generate REST endpoints from decorators ex: @router.rest("GET", "/students").
+        for route_key, endpoint in lambda_function.router.get_rest_endpoints().items():
+            print(f"Creating REST endpoint for {route_key}")
+            http_api.add_routes(
+                path=endpoint['path'],
+                methods=[apigatewayv2.HttpMethod(endpoint['method'])],
+                integration=integration
+            )
+
+        #
+        # Graphql (AppSync) stuff starts here
+        #
         policy = iam.PolicyStatement(actions=['lambda:InvokeFunction'],
                                      resources=[service_lambda.function_arn])
         principal = iam.ServicePrincipal('appsync.amazonaws.com')
@@ -131,33 +162,9 @@ class CdkStack(core.Stack):
             )
 
 
-        #
-        # Example for how to create an API gateway integration point for ReST support
-        #
-
-        # Create an API gateway integration point for ReST
-        # integration = api_gateway.CfnIntegration(
-        #     self, 'dynamic-routing-integration',
-        #     api_id="XXXXXXXX",
-        #     description='lambda integration',
-        #     integration_type='AWS_PROXY',
-        #     payload_format_version='1.0',
-        #     integration_uri=f'arn:aws:apigateway:{self.region}:lambda:path/2015-03-31/functions/arn:aws:lambda:us-west-2:XXXXXXXXX:function:dynamic-routing-dev:live/invocations')
-
-        # Do slick ass auto generation of ReST routes.
-        # for endpoint in lambda_function.router.get_rest_endpoints().keys():
-        #     print("Creating rest route for " + endpoint)
-        #
-        #     method, path = endpoint.split(' ', 1)
-        #     components = path.replace('{', '').replace('}', '').split('/')
-        #     name = components[0] + ''.join(x.title() for x in components[1:])
-        #
-        #     api_gateway.CfnRoute(self,
-        #                          name + 'Route',
-        #                          route_key=endpoint,
-        #                          api_id="XXXXXXXX",
-        #                          authorization_type='NONE',
-        #                          target=f'integrations/{integration.ref}')
+        core.CfnOutput(self, "RestAPIOutput",
+                       value=http_api.url,
+                       export_name=f"{stack_name}-RestApiUrl-{stage}")
 
         core.CfnOutput(self, "GraphQLApiIdOutput",
                        value=graphql_api.api_id,

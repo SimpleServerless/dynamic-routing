@@ -56,7 +56,7 @@ def get_student(args: dict) -> dict:
 # Mutation Actions
 #
 @router.direct("save_student") # Resolves for a direct invoke
-@router.rest("PUT", "/students") # Resolves for a ReST endpoint
+@router.rest("PUT", "/students/{studentId}") # Resolves for a ReST endpoint
 @router.graphql("Mutation", "saveStudent")
 def save_student(args: dict) -> dict:
     # Save a dog
