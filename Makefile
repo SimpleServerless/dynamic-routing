@@ -18,29 +18,6 @@ print-stage:
 	@echo
 
 
-build: clean
-	cp -R src dist
-	# Lambda requires linux x86. This will make sure the dependencies target that instead of the local architecture.
-	pip install --no-deps --platform manylinux1_x86_64 -r src/requirements.txt -t dist/
-
-# Example for deploying with CDK instead of SAM
-deploy: build
-	cdk deploy --require-approval never
-
-synth:
-	cdk synth
-
-# May need to be run one time if deploy gets the error "This stack uses assets, so the toolkit stack must be deployed"
-bootstrap:
-	cdk bootstrap aws://$(AWS_ACCOUNT)/$(REGION)
-
-package: build
-	@if test -z "$(STAGE)"; then echo "****** STAGE not set. Set STAGE with: export STAGE=env ******"; exit 1; fi
-	sam package \
-	--s3-bucket $(S3_BUCKET) \
-	--output-template-file "package.$(STAGE).yaml"
-
-
 clean:
 	@echo 'Removing crap'
 	rm -rf dist
@@ -49,6 +26,33 @@ clean:
 	rm -rf tests/.pytest_cache
 	rm -rf src/__pycache__
 	rm -rf tests/integration/__pycache__
+
+
+build: clean
+	cp -R src dist
+	# Lambda requires linux x86. This will make sure the dependencies target that instead of the local architecture.
+	pip install --no-deps --platform manylinux1_x86_64 -r src/requirements.txt -t dist/
+
+
+# Example for deploying with CDK instead of SAM
+deploy: build
+	cdk deploy --require-approval never
+
+
+synth:
+	cdk synth
+
+
+# May need to be run one time if deploy gets the error "This stack uses assets, so the toolkit stack must be deployed"
+bootstrap:
+	cdk bootstrap aws://$(AWS_ACCOUNT)/$(REGION)
+
+
+package: build
+	@if test -z "$(STAGE)"; then echo "****** STAGE not set. Set STAGE with: export STAGE=env ******"; exit 1; fi
+	sam package \
+	--s3-bucket $(S3_BUCKET) \
+	--output-template-file "package.$(STAGE).yaml"
 
 
 invoke:

@@ -50,7 +50,7 @@ input StudentInput {
   studentUuid: ID!
 
   # Student Id
-  studentId: Int
+  studentId: Int!
 
   # First name
   firstName: String

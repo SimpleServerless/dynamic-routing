@@ -3,7 +3,6 @@ import sys
 
 import aws_cdk.core as core
 import aws_cdk.aws_appsync as appsync
-import aws_cdk.aws_ec2 as ec2
 import aws_cdk.aws_lambda as aws_lambda
 import aws_cdk.aws_iam as iam
 import aws_cdk.aws_apigatewayv2 as apigatewayv2
@@ -53,22 +52,10 @@ class CdkStack(core.Stack):
                                       }
                              }
 
-        # How to: Retrieve an existing VPC instance.
-        vpc = ec2.Vpc.from_lookup(self, 'VPC', vpc_id=environment[stage]['vpcId'])
-
         env_variables = {
             'STAGE': stage,
-            "PGHOST": environment[stage]['dbHost'],
-            "PGPORT": "5432",
-            "PGDATABASE": environment[stage]['dbName'],
             "LOG_LEVEL": environment[stage]['logLevel']
         }
-
-        # How to: Import a value exported from another stack
-        app_security_group_id = core.Fn.import_value(f"simple-serverless-database-us-east-2-{stage}-AppSGId")
-
-        # How to: Import a security group
-        app_security_group = ec2.SecurityGroup.from_security_group_id(self, "AppSecurityGroup", app_security_group_id)
 
         # Create the main lambda function
         service_lambda = aws_lambda.Function(self,
@@ -81,15 +68,7 @@ class CdkStack(core.Stack):
                                              tracing=aws_lambda.Tracing.ACTIVE,
                                              memory_size=128,
                                              handler='lambda_function.handler',
-                                             vpc=vpc,
-                                             security_groups=[app_security_group],
                                              environment=env_variables)
-
-        # Add SecretsManager permissions to lambda
-        service_lambda.add_to_role_policy(iam.PolicyStatement(
-            effect=iam.Effect.ALLOW,
-            actions=["secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue", "secretsmanager:List*"],
-            resources=[f"arn:aws:secretsmanager:{region}:{account}:secret:simple-serverless/*"]))
 
         #
         # REST (API Gateway HTTP) stuff starts here
@@ -101,7 +80,7 @@ class CdkStack(core.Stack):
         # How to: Create a new HTTP API Gateway instance
         http_api = apigatewayv2.HttpApi(
             self, 'APIGateway',
-            api_name=f'dynamic-rest-api-{stage}'
+            api_name=f'{service_name}-api-{stage}'
         )
 
         integration = apigatewayv2_integrations.LambdaProxyIntegration(
@@ -136,7 +115,7 @@ class CdkStack(core.Stack):
 
         graphql_api = appsync.GraphqlApi(
             self, 'GraphQLApi',
-            name='dynamic-graphql-api-' + stage,
+            name=f'{service_name}-api-' + stage,
             authorization_config=graphql_auth_config,
             schema=graphql_schema
         )
@@ -162,7 +141,7 @@ class CdkStack(core.Stack):
             )
 
 
-        core.CfnOutput(self, "RestAPIOutput",
+        core.CfnOutput(self, "RestAPIUrlOutput",
                        value=http_api.url,
                        export_name=f"{stack_name}-RestApiUrl-{stage}")
 
@@ -195,7 +174,7 @@ app = core.App()
 account = os.environ['AWS_ACCOUNT']
 region = os.environ['AWS_DEFAULT_REGION']
 
-CdkStack(app, "dynamic-routing-us-east2-dev", env={"account": account, "region": region})
+CdkStack(app, f"{service_name}-us-east2-dev", env={"account": account, "region": region})
 
 app.synth()
 
