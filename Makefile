@@ -48,13 +48,6 @@ bootstrap:
 	cdk bootstrap aws://$(AWS_ACCOUNT)/$(REGION)
 
 
-package: build
-	@if test -z "$(STAGE)"; then echo "****** STAGE not set. Set STAGE with: export STAGE=env ******"; exit 1; fi
-	sam package \
-	--s3-bucket $(S3_BUCKET) \
-	--output-template-file "package.$(STAGE).yaml"
-
-
 invoke:
 	aws lambda invoke --invocation-type RequestResponse --function-name $(FUNCTION)-$(STAGE) --payload '{"route": "list_students", "args": {}}' --cli-binary-format raw-in-base64-out /dev/stdout
 
