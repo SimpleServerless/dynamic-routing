@@ -1,10 +1,29 @@
 # Dynamic Routing: Lesson 2
+There are many frameworks out there like Amplify, Serverless, Chalice... that obscure the complexity of building a serverless API. 
+This works well for getting small projects up and going, but sometimes they obscure things you would
+prefer to be transparent, or bring opinions that you'd rather not live with. This project includes everything needed
+to deploy a fully functional REST and/or GraphQL API, with just a couple short Python files that you can
+tweak however you like.
+
+The repo builds on the patterns used in [Simple Routing: Lesson 1](https://github.com/SimpleServerless/simple-routing) 
+and uses CDK and Python to dynamically create REST and GrqphQL 
+infrastructure driven by function decorators found in the lambda_function.py file which contains the handler. Using
+CDK this can be done with about two lines of code.
+```
+# /app.py
+# How to: auto generate REST endpoints from decorators ex: @router.rest("GET", "/students").
+for route_key, endpoint in lambda_function.router.get_rest_endpoints().items():
+    http_api.add_routes( path=endpoint['path'], methods=[apigatewayv2.HttpMethod(endpoint['method'])], integration=integration )
+```
+
+
+# Objectives
+- Demonstrate how to use CDK to scan for decorators and dynamically deploy the needed infrastructure.
+- Demonstrate how to use CDK to create REST (API Gateway) and GraphQL (AppSync) APIs.
+
+# What is in this repo
 This repo is a companion to **Lesson 2** in the "Simple Serverless" series and future lessons will build on the tools and patterns used here.
 I hope you find something here helpful, and please give this repo a star if you do. Thanks for checking it out.
-
-This repo builds on the patterns used in [Simple Routing: Lesson 1](https://github.com/SimpleServerless/simple-routing) 
-that uses decorators to map REST and GrqphQL endpoints to functions in lambdas but also leverages CDK to scan the lambda
-for decorators and automatically generate API Gateway (REST) or AppSync (GraphQL) endpoints during deployment.
 
 You can use CDK and the included `app.py` file to deploy a fully functional API to AWS. 
 I was careful to favor resources that are only "pay for what you use" so there should be little or no reoccurring costs for this deployment.
@@ -13,7 +32,7 @@ I also use this repo as a toolbox of tricks I've learned over the years to make 
 
 You will find in this repo:
 - A single CDK file (app.py) that will scan lambda_function.py for decorators ex: `@router.rest("GET", "/students")` and automatically generate API Gateway (REST) or AppSync (GraphQL) endpoints.
-- All the infrastructure as code needed to deploy fully functional APIs via SAM which is an AWS extension of CloudFormation
+- All the infrastructure as code needed to deploy fully functional APIs via CDK
 - A simple script (`run_local.py`) that makes it easy to iterate and debug locally
 - Commands to invoke a deployed lambda and tail its logs in realtime (`make invoke`, `make tail`)
 
@@ -72,6 +91,7 @@ and other resources they depend on.
 
 # Deploy
 ```
+export set STAGE=dev
 git clone git@github.com:SimpleServerless/dynamic-routing.git
 cd dynamic-routing
 make deploy
@@ -107,6 +127,9 @@ You can run this script in an IDE to execute lambda_function.handler locally, se
 
 
 # Make Targets
+Most make targets require that you export a `STAGE` variable (dev, prod, test...). 
+This makes it easier to deploy a stacks for multiple environments on the same AWS account.
+
 **clean:** Removes artifacts that are created by testing and deploying
 
 **build:** Uses src/requirements.txt to prepare target appropriate (manylinux1_x86_64) dependencies for deployment
